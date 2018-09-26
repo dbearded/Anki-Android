@@ -53,12 +53,20 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.requery.android.database.sqlite.SQLiteDatabase;
 import timber.log.Timber;
@@ -95,6 +103,7 @@ public class CardContentProvider extends ContentProvider {
     private static final int NOTES_ID_CARDS = 1003;
     private static final int NOTES_ID_CARDS_ORD = 1004;
     private static final int NOTES_V2 = 1005;
+    private static final int NOTES_MULTIMEDIA = 1006;
     private static final int MODELS = 2000;
     private static final int MODELS_ID = 2001;
     private static final int MODELS_ID_EMPTY_CARDS = 2002;
@@ -116,6 +125,7 @@ public class CardContentProvider extends ContentProvider {
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "notes/#", NOTES_ID);
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "notes/#/cards", NOTES_ID_CARDS);
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "notes/#/cards/#", NOTES_ID_CARDS_ORD);
+        sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "notes_multimedia", NOTES_MULTIMEDIA);
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "models", MODELS);
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "models/*", MODELS_ID); // the model ID can also be "current"
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "models/*/empty_cards", MODELS_ID_EMPTY_CARDS);
@@ -163,6 +173,7 @@ public class CardContentProvider extends ContentProvider {
         switch (match) {
             case NOTES_V2:
             case NOTES:
+            case NOTES_MULTIMEDIA:
                 return FlashCardsContract.Note.CONTENT_TYPE;
             case NOTES_ID:
                 return FlashCardsContract.Note.CONTENT_ITEM_TYPE;
@@ -858,6 +869,63 @@ public class CardContentProvider extends ContentProvider {
             case NOTES_ID_CARDS_ORD:
                 // Cards are generated automatically by libanki
                 throw new IllegalArgumentException("Not possible to insert cards directly (only through NOTES)");
+            case NOTES_MULTIMEDIA:
+                /* Insert new multimedia note with specified fields and tags
+                 * This is almost an exact copy from case NOTES above
+                 */
+                Long modelId = values.getAsLong(FlashCardsContract.Note.MID);
+                String flds = values.getAsString(FlashCardsContract.Note.FLDS);
+                String tags = values.getAsString(FlashCardsContract.Note.TAGS);
+                // Create empty note
+                com.ichi2.libanki.Note newNote = new com.ichi2.libanki.Note(col, col.getModels().get(modelId));
+                // Set fields
+                String[] fldsArray = Utils.splitFields(flds);
+                // Check that correct number of flds specified
+                if (fldsArray.length != newNote.getFields().length) {
+                    throw new IllegalArgumentException("Incorrect flds argument : " + flds);
+                }
+                String fieldMM;
+                for (int idx=0; idx < fldsArray.length; idx++) {
+                    fieldMM = fldsArray[idx];
+                    // Check for multimedia
+                    if (fieldMM.startsWith("[sound:")) {
+                        Pattern p = Pattern.compile("\\[sound:(.*)\\]");
+                        Matcher m = p.matcher(fieldMM);
+                        if (m.find()) {
+                            String group = m.group(1);
+                            Uri tmpFldUri = Uri.parse(group);
+                            File outFile = null;
+                            try {
+                                InputStream inStream  = getContext().getContentResolver().openInputStream(tmpFldUri);
+                                String tmpFname = tmpFldUri.getLastPathSegment();
+                                outFile = new File(col.getMedia().dir(), tmpFname);
+                                FileOutputStream fos = new FileOutputStream(outFile);
+                                copyStreams(inStream, fos);
+                            } catch (FileNotFoundException e) {
+                                e.printStackTrace();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+//                            File file = new File(Uri.parse(m.group(1)).getPath());
+                            try {
+                                // This is copied from NoteService.importMediaToDirectory
+                                fieldMM = col.getMedia().addFile(outFile);
+                                fieldMM = String.format("[sound:%s]", outFile.getName());
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                    newNote.setField(idx, fieldMM);
+                }
+                // Set tags
+                if (tags != null) {
+                    newNote.setTagsFromStr(tags);
+                }
+                // Add to collection
+                col.addNote(newNote);
+                col.save();
+                return Uri.withAppendedPath(FlashCardsContract.Note.CONTENT_URI, Long.toString(newNote.getId()));
             case MODELS:
                 // Get input arguments
                 String modelName = values.getAsString(FlashCardsContract.Model.NAME);
@@ -1333,4 +1401,18 @@ public class CardContentProvider extends ContentProvider {
         }
         return null;
     }
+
+    private int copyStreams(InputStream in, OutputStream out) throws IOException {
+        byte[] bytes = new byte[1024/* bytes */* 1024/* kilobytes */* 10/* megabytes */];
+        int copiedBytesSize = 0;
+        int currentByte = 0;
+
+        while (-1 != (currentByte = in.read(bytes))) {
+            out.write(bytes, 0, currentByte);
+            copiedBytesSize += currentByte;
+        }
+
+        return copiedBytesSize;
+    }
+
 }
