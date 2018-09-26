@@ -21,12 +21,14 @@ package com.ichi2.anki.api;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Process;
+import android.provider.OpenableColumns;
 import android.text.TextUtils;
 import android.util.SparseArray;
 
@@ -37,6 +39,8 @@ import com.ichi2.anki.FlashCardsContract.Deck;
 import com.ichi2.anki.FlashCardsContract.Model;
 import com.ichi2.anki.FlashCardsContract.Note;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -84,6 +88,32 @@ public final class AddContentApi {
             return null;
         }
         return Long.parseLong(noteUri.getLastPathSegment());
+    }
+
+
+    public Long addMultiMediaNote(long modelId, long deckId, Map<String, String> fields, Set<String> tags, Intent mediaIntent) {
+        Uri noteUri = addMultiMediaNoteInternal(modelId, deckId, fields, tags, mediaIntent);
+        if (noteUri == null) {
+            return null;
+        }
+        return Long.parseLong(noteUri.getLastPathSegment());
+    }
+
+    private Uri addMultiMediaNoteInternal(long modelId, long deckId, Map<String, String> fields, Set<String> tags, Intent mediaIntent) {
+        Uri returnUri = mediaIntent.getData();
+        Cursor returnCursor = mResolver.query(returnUri, null, null, null, null);
+        int nameIndex = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+        int fileSize = returnCursor.getColumnIndex(OpenableColumns.SIZE);
+        returnCursor.moveToFirst();
+        String name = returnCursor.getString(nameIndex);
+        long size = returnCursor.getLong(fileSize);
+        returnCursor.close();
+        String type = mResolver.getType(returnUri);
+        File inFile = new File(returnUri.getPath());
+        // TODO Derek
+//        File oFile = new File();
+
+        return null;
     }
 
     private Uri addNoteInternal(long modelId, long deckId, String[] fields, Set<String> tags) {
