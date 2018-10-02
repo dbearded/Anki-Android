@@ -115,6 +115,12 @@ public class CardContentProvider extends ContentProvider {
     private static final int DECK_SELECTED = 4001;
     private static final int DECKS_ID = 4002;
 
+    private static final int CARDS = 9000;
+    private static final int COLLECTION = 9001;
+    private static final int GRAVES = 9002;
+    private static final int REVLOG = 9003;
+
+
     private static final UriMatcher sUriMatcher =
             new UriMatcher(UriMatcher.NO_MATCH);
 
@@ -136,6 +142,10 @@ public class CardContentProvider extends ContentProvider {
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "decks/", DECKS);
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "decks/#", DECKS_ID);
         sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "selected_deck/", DECK_SELECTED);
+        sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "cards", CARDS);
+        sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "collection", COLLECTION);
+        sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "graves", GRAVES);
+        sUriMatcher.addURI(FlashCardsContract.AUTHORITY, "revlog", REVLOG);
     }
 
     /**
@@ -247,6 +257,18 @@ public class CardContentProvider extends ContentProvider {
                 } else {
                     return null;
                 }
+            }
+            case CARDS: {
+                return col.getDb().getDatabase().query("cards", null, null, null, null, null, null);
+            }
+            case COLLECTION: {
+                return col.getDb().getDatabase().query("col", null, null, null, null, null, null);
+            }
+            case GRAVES: {
+                return col.getDb().getDatabase().query("graves", null, null, null, null, null, null);
+            }
+            case REVLOG: {
+                return col.getDb().getDatabase().query("revlog", null, null, null, null, null, null);
             }
             case NOTES_ID: {
                 /* Direct access note with specific ID*/
